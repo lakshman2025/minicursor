@@ -1,51 +1,89 @@
-from planner import Planner
+import json
+
 from state import AgentState
 from context import ContextBuilder
+from agent_llm import AgentLLM
+
+
 class Harness:
+
     def __init__(self, registry):
         self.registry = registry
-        self.planner = Planner(registry)
+        self.agent_llm = AgentLLM(registry)
+
         self.state = AgentState()
         self.context_builder = ContextBuilder()
 
-
     def run(self, user_request):
-        print("\nPlanning...\n")
-        
-        self.state.messages.append(
-            {
-                "role": "user",
-                "content": user_request
-            }
-        )
-        context = self.context_builder.build(self.state, user_request)
-        
-        plan = self.planner.create_plan(context)
-        self.state.current_plan = plan
 
-        print("Executing Plan...\n")
+        self.state.tool_history = []
+        self.state.last_tool_result = None
+        self.state.messages = [{
+            "role": "user",
+            "content": user_request
+        }]
 
-        for step in plan["steps"]:
+        last_call = None
+        MAX_STEPS = 100
 
-            tool = step["tool"]
+        for _ in range(MAX_STEPS):
 
-            args = step["args"]
-
-            print(f"Running Tool -> {tool}")
-
-            result = self.registry.execute(
-                tool,
-                **args
+            context = self.context_builder.build(
+                self.state,
+                user_request
             )
-            self.state.tool_history.append(
-                {
-                    "tool": tool,
-                    "args": args,
-                    "result": result
+
+            action = self.agent_llm.step(context)
+
+            print(action)
+
+            if action.get("finish"):
+
+                print("\n==============================")
+                print("Task Completed")
+                print("==============================\n")
+
+                print(self.agent_llm.summarize(self.state))
+                return
+
+            tool = action["tool"]
+            args = action.get("args", {})
+
+            call_key = (tool, str(args))
+
+            if call_key == last_call:
+
+                result = {
+                    "status": "error",
+                    "message": (
+                        "You just executed this exact tool call. "
+                        "Choose a different next action."
+                    )
                 }
-            )
+
+            else:
+
+                print(f"Running tool: {tool}")
+
+                try:
+                    result = self.registry.execute(tool, **args)
+
+                except Exception as e:
+                    result = {
+                        "status": "error",
+                        "message": str(e)
+                    }
+
+                last_call = call_key
+
+            self.state.tool_history.append({
+                "tool": tool,
+                "args": args,
+                "result": result
+            })
+
             self.state.last_tool_result = result
 
-            print(result)
-
-        print("\nFinished.")
+        raise RuntimeError(
+            f"Agent exceeded {MAX_STEPS} steps without finishing."
+        )

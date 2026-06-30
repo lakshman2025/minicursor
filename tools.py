@@ -87,9 +87,38 @@ class ReadFileTool(BaseTool):
             }
 
 
+class ListFilesTool(BaseTool):
+    name = "list_files"
+    description = "List files and directories at a path. Use to explore the project structure."
+    parameters = "path='.'"
+
+    def execute(self, path=".", **kwargs):
+        if not os.path.isdir(path):
+            return {
+                "status": "error",
+                "path": path,
+                "message": f"Path not found: {path}",
+                "entries": [],
+            }
+
+        entries = []
+        for name in sorted(os.listdir(path)):
+            full_path = os.path.join(path, name)
+            entries.append({
+                "name": name,
+                "type": "dir" if os.path.isdir(full_path) else "file",
+            })
+
+        return {
+            "status": "success",
+            "path": path,
+            "entries": entries,
+        }
+
+
 class SearchCodeTool(BaseTool):
     name = "search_code"
-    description = "Search files for text matching a query."
+    description = "Search an existing codebase for text. Use only when you need information from files that already exist."
     parameters = "query, root='workspace'"
 
     def execute(self, query="", root="workspace", **kwargs):
@@ -131,3 +160,33 @@ class SearchCodeTool(BaseTool):
             "query": query,
             "matches": matches,
         }
+import subprocess
+
+class ShellTool(BaseTool):
+    name = "shell"
+    description = "Execute a shell command in the workspace."
+    parameters = "command"
+
+    def execute(self, command: str):
+        try:
+            result = subprocess.run(
+                command,
+                cwd="workspace",
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            return {
+                "status": "success" if result.returncode == 0 else "error",
+                "returncode": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+            }
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": str(e)
+            }

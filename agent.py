@@ -3,7 +3,9 @@ from tools import (
     MkdirTool,
     WriteFileTool,
     ReadFileTool,
+    ListFilesTool,
     SearchCodeTool,
+    ShellTool,
 )
 
 from harness import Harness
@@ -14,13 +16,11 @@ registry = ToolRegistry()
 registry.register(MkdirTool())
 registry.register(WriteFileTool())
 registry.register(ReadFileTool())
+registry.register(ListFilesTool())
 registry.register(SearchCodeTool())
+registry.register(ShellTool())
 
-result = registry.execute(
-    "search_code",
-    query="FastAPI"
-)
-
+agent = Harness(registry)
 
 while True:
 
@@ -31,9 +31,10 @@ while True:
 
 
     try:
-        agent = Harness(registry)
+        
         agent.run(user_input)
 
     except Exception as e:
         print(f"\nAgent Error: {e}")
+
 
