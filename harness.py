@@ -43,8 +43,9 @@ class Harness:
                 print("Task Completed")
                 print("==============================\n")
 
-                print(self.agent_llm.summarize(self.state))
-                return
+                summary = self.agent_llm.summarize(self.state)
+                print(summary)
+                return summary
 
             tool = action["tool"]
             args = action.get("args", {})

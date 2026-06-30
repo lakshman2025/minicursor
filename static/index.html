@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minicursor Agent</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f4f4f5;
+      color: #18181b;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+    }
+
+    h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.75rem;
+    }
+
+    .subtitle {
+      margin: 0 0 1.5rem;
+      color: #71717a;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e4e4e7;
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 0.75rem;
+      border: 1px solid #d4d4d8;
+      border-radius: 8px;
+      font: inherit;
+      resize: vertical;
+    }
+
+    textarea:focus {
+      outline: 2px solid #3b82f6;
+      border-color: #3b82f6;
+    }
+
+    .actions {
+      margin-top: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    button {
+      background: #18181b;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.25rem;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      background: #27272a;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status {
+      color: #71717a;
+      font-size: 0.9rem;
+    }
+
+    .reply {
+      margin-top: 1.5rem;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+
+    .error {
+      color: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Minicursor Agent</h1>
+    <p class="subtitle">Describe a coding task and the agent will build it in the workspace.</p>
+
+    <div class="card">
+      <form id="chat-form">
+        <label for="message">Your request</label>
+        <textarea
+          id="message"
+          name="message"
+          placeholder="e.g. build a FastAPI todo application"
+          required
+          minlength="5"
+        ></textarea>
+
+        <div class="actions">
+          <button type="submit" id="submit-btn">Send</button>
+          <span class="status" id="status"></span>
+        </div>
+      </form>
+
+      <div class="reply" id="reply" hidden></div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("chat-form");
+    const messageInput = document.getElementById("message");
+    const submitBtn = document.getElementById("submit-btn");
+    const statusEl = document.getElementById("status");
+    const replyEl = document.getElementById("reply");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const message = messageInput.value.trim();
+      if (message.length < 5) {
+        return;
+      }
+
+      submitBtn.disabled = true;
+      statusEl.textContent = "Running agent...";
+      replyEl.hidden = true;
+      replyEl.classList.remove("error");
+      replyEl.textContent = "";
+
+      try {
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || "Request failed");
+        }
+
+        replyEl.textContent = data.reply;
+        replyEl.hidden = false;
+        statusEl.textContent = "Done";
+      } catch (error) {
+        replyEl.textContent = error.message;
+        replyEl.classList.add("error");
+        replyEl.hidden = false;
+        statusEl.textContent = "Error";
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

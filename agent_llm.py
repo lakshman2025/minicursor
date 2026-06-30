@@ -47,7 +47,7 @@ class AgentLLM:
         raise ValueError(f"Unrecognized action: {raw}")
 
     
-   def step(self, context: str) -> dict:
+    def step(self, context: str) -> dict:
 
         prompt = f"""
     You are an autonomous AI Software Engineering Agent.
