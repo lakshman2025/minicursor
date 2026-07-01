@@ -11,6 +11,9 @@ __pycache__/
 # Environment variables
 .env
 
+# Documentation (local only)
+docs/
+
 # Workspace/output
 workspace/
 

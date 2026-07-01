@@ -9,7 +9,7 @@ class ContextBuilder:
     def build(self, state: AgentState, user_request: str) -> str:
 
         conversation = "\n".join(
-            msg["content"]
+            f"{msg['role']}: {msg['content']}"
             for msg in state.messages[-20:]
         )
 
@@ -34,6 +34,7 @@ Previous Tool Results
 {tool_history if state.tool_history else "(none yet)"}
 
 Remember:
+- Write new project files under workspace/ only.
 - Do not repeat the same tool call unless new information is needed.
 - Continue implementing until the requested application is complete.
 - Finish only when no more work is required.

@@ -46,7 +46,6 @@ class AgentLLM:
 
         raise ValueError(f"Unrecognized action: {raw}")
 
-    
     def step(self, context: str) -> dict:
 
         prompt = f"""
@@ -73,6 +72,33 @@ class AgentLLM:
     Never invent tool names.
 
     ==================================================
+    CASUAL CHAT (no tools)
+
+    Read the Conversation and Current Request in the context below.
+
+    If the user is greeting you, making small talk, or asking a general
+    question (NOT a coding task), return finish with a direct reply.
+    Do NOT use tools.
+
+    Your "message" MUST be a specific answer to what the user actually said.
+    Never copy a template or repeat the same reply every time.
+
+    Examples of good behavior (adapt to the real message):
+    - User: "Hi"           → "Hi! How can I help you today?"
+    - User: "How are you?" → answer naturally, then offer to help with coding
+    - User: "What can you do?" → briefly explain you build and fix software
+    - User: "Thanks"       → "You're welcome!" (or similar)
+
+    Format (replace <reply> with your own words):
+    {{
+        "finish": true,
+        "message": "<reply>"
+    }}
+
+    Only use tools when the user wants code written, fixed, built, tested,
+    or run.
+
+    ==================================================
     GENERAL WORKFLOW
 
     For every iteration:
@@ -91,9 +117,10 @@ class AgentLLM:
     ----------
     - Use list_files to inspect directories.
     - Use mkdir before creating new folders.
-    - Use write_file to create or modify files.
+    - Use write_file to create or modify files (paths under workspace/ only).
     - Use read_file only when you genuinely need file contents.
     - Use search_code only to search existing source code.
+    - Never modify backend/, frontend/, or other Minicursor source files.
 
     Avoid loops
     -----------
@@ -202,11 +229,18 @@ class AgentLLM:
         }}
     }}
 
-    Finish Example
+    Finish Example (coding task done — summarize what was accomplished)
 
     {{
         "finish": true,
         "message": "Task completed."
+    }}
+
+    Finish Example (casual chat — reply to the user in your own words)
+
+    {{
+        "finish": true,
+        "message": "<your direct reply to their message>"
     }}
 
     Return raw JSON only.

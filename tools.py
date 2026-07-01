@@ -1,6 +1,20 @@
 import os
+import subprocess
 
 IGNORED_DIRS = {"__pycache__", ".git", ".venv", "venv"}
+WORKSPACE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workspace")
+
+
+def _workspace_path(path: str) -> str:
+    """Keep file tool paths inside workspace/."""
+    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+    normalized = path.replace("\\", "/")
+    if not normalized.startswith("workspace/"):
+        path = os.path.join("workspace", path)
+    full = os.path.abspath(path)
+    if not full.startswith(os.path.abspath(WORKSPACE_DIR)):
+        raise ValueError(f"Path must stay inside workspace/: {path}")
+    return full
 
 
 class BaseTool:
@@ -41,6 +55,10 @@ class MkdirTool(BaseTool):
     parameters = "path"
 
     def execute(self, path):
+        try:
+            path = _workspace_path(path)
+        except ValueError as e:
+            return {"status": "error", "message": str(e)}
         os.makedirs(path, exist_ok=True)
         return f"Directory created: {path}"
 
@@ -51,8 +69,11 @@ class WriteFileTool(BaseTool):
     parameters = "path, content"
 
     def execute(self, path: str, content: str):
+        try:
+            path = _workspace_path(path)
+        except ValueError as e:
+            return {"status": "error", "message": str(e)}
         directory = os.path.dirname(path)
-
         if directory:
             os.makedirs(directory, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
@@ -70,6 +91,10 @@ class ReadFileTool(BaseTool):
     parameters = "path"
 
     def execute(self, path: str):
+        try:
+            path = _workspace_path(path)
+        except ValueError as e:
+            return {"status": "error", "path": path, "message": str(e)}
         try:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -160,7 +185,7 @@ class SearchCodeTool(BaseTool):
             "query": query,
             "matches": matches,
         }
-import subprocess
+
 
 class ShellTool(BaseTool):
     name = "shell"
@@ -168,14 +193,15 @@ class ShellTool(BaseTool):
     parameters = "command"
 
     def execute(self, command: str):
+        os.makedirs(WORKSPACE_DIR, exist_ok=True)
         try:
             result = subprocess.run(
                 command,
-                cwd="workspace",
+                cwd=WORKSPACE_DIR,
                 shell=True,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
             )
 
             return {
@@ -188,5 +214,5 @@ class ShellTool(BaseTool):
         except Exception as e:
             return {
                 "status": "error",
-                "message": str(e)
+                "message": str(e),
             }

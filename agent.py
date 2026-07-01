@@ -49,8 +49,8 @@ def index():
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     try:
-        reply = agent.run(request.message)
-        return ChatResponse(reply=reply)
+        assistant_message = agent.run(request.message)
+        return ChatResponse(reply=assistant_message["content"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -63,7 +63,8 @@ def run_cli():
             break
 
         try:
-            agent.run(user_input)
+            assistant_message = agent.run(user_input)
+            print(f"\nAssistant >> {assistant_message['content']}")
         except Exception as e:
             print(f"\nAgent Error: {e}")
 

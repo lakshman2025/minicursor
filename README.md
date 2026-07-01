@@ -1,6 +1,6 @@
 # Minicursor
 
-A small interactive coding agent that uses an LLM to plan and run tools (read/write files, search code, run shell commands). It can be used from the terminal, a web UI, or a FastAPI `POST /chat` endpoint.
+A small interactive coding agent that uses an LLM to plan and run tools (read/write files, search code, run shell commands). It runs as a **React UI + FastAPI backend** with conversations persisted in PostgreSQL. A standalone CLI / legacy web entry point (`agent.py`) is also available.
 
 ## Objectives
 
@@ -12,185 +12,230 @@ The project was developed to understand:
 * Context management across multiple iterations
 * Execution loop between the agent and the runtime
 * Autonomous software generation
+* Persisting agent state across server restarts
 
 ## System Architecture
 
-The system consists of the following components:
+```
+React UI (frontend/)  →  FastAPI (backend/)  →  PostgreSQL
+                              ↓
+                    Harness → AgentLLM → Tools
+```
 
-* **Harness** – Controls the execution loop, executes tools, and maintains the agent state.
-* **Agent LLM** – Acts as the decision-making component. It analyzes the current context and decides the next action.
-* **Context Builder** – Prepares the prompt by combining the user's request with previous tool results.
-* **Tool Registry** – Stores and executes the available tools.
-* **Agent State** – Maintains conversation history and tool execution history throughout the task.
+**Agent core** (project root):
+
+* **Harness** – Controls the execution loop, executes tools, and updates agent state.
+* **Agent LLM** – Decides the next action (tool call, casual reply, or finish).
+* **Context Builder** – Builds the prompt from conversation and tool history.
+* **Tool Registry** – Stores and executes available tools.
+
+**Backend** (`backend/`):
+
+* **Sessions** – Chat metadata (title, workspace, active flag).
+* **Agent State** – Conversation and tool history stored as JSONB in PostgreSQL.
+* **Repositories / Services** – Database access and business rules.
 
 ## Workflow
 
-1. The user submits a request.
-2. The Harness builds the execution context.
-3. The context is sent to the Agent LLM.
-4. The Agent LLM decides the next tool to execute.
-5. The Harness executes the selected tool.
-6. The tool result is stored in the agent state.
-7. The updated context is sent back to the Agent LLM.
-8. Steps 3–7 continue until the agent determines that the task is complete.
-9. Finally, the agent generates a summary of the completed work for the user.
+1. The user opens a chat session in the UI (or sends a message via API).
+2. The backend loads `agent_state` for that session from the database.
+3. The Harness appends the user message and runs the agent loop.
+4. The Agent LLM decides: reply casually, call a tool, or finish.
+5. Tool results are stored in `agent_state.tool_history`.
+6. The loop continues until the task is complete.
+7. The assistant reply is saved to `agent_state.messages` and returned to the UI.
 
 ## Implemented Tools
 
-The current implementation includes the following tools:
-
 * List files
 * Create directories
-* Read files
-* Write files
+* Read / write files
 * Search code
 * Execute shell commands
-
-The shell tool allows the agent to:
-
-* Create Python virtual environments
-* Install project dependencies
-* Execute test cases
-* Start applications for verification
 
 ## Features
 
 * Autonomous decision-making using an LLM
 * Multi-step reasoning through an iterative execution loop
-* Dynamic tool selection
-* Context-aware execution
-* Automatic project generation
-* Dependency installation
-* Test execution
-* Application verification
-* Final task summarization
-* FastAPI backend with `POST /chat`
-* Simple web UI for submitting tasks from the browser
+* Casual chat and coding tasks in the same flow
+* Session-based chats with persistent history
+* React chat UI with sidebar (new / remove / select sessions)
+* FastAPI REST API (`/sessions`, `/sessions/{id}/chat`)
+* Soft-delete sessions (`active = false`)
 
 ## Prerequisites
 
 - Python 3.10 or newer
+- Node.js 18+ (for the React frontend)
+- PostgreSQL
 - An LLM API endpoint and API key
 
 ## Setup
 
-1. **Clone or open this project**, then go to the project root:
+### 1. Project root
 
 ```bash
 cd minicursor
 ```
 
-2. **Create and activate a virtual environment** (recommended):
+### 2. Python virtual environment
 
 ```bash
 python -m venv env
 ```
 
-On Windows (PowerShell):
+Windows (PowerShell):
 
 ```powershell
 .\env\Scripts\Activate.ps1
 ```
 
-On macOS/Linux:
+macOS/Linux:
 
 ```bash
 source env/bin/activate
 ```
 
-3. **Install dependencies**:
+### 3. Python dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-4. **Create a `.env` file** in the project root with your LLM settings:
+### 4. Frontend dependencies
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 5. Environment file
+
+Create a `.env` file in the **project root**:
 
 ```env
 LLM_ENDPOINT=https://your-llm-provider.example/v1/responses
 LLM_API_KEY=your_api_key_here
 LLM_MODEL=your_model_name
+DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/minicursor
 ```
 
-Replace the values with your provider's endpoint, API key, and model name.
+### 6. Database migrations
 
-## Run the agent
+From the `backend/` directory:
 
-### Web UI (default)
+```bash
+cd backend
+alembic upgrade head
+cd ..
+```
 
-From the project root (with your virtual environment activated):
+---
+
+## How to run (recommended — full stack)
+
+You need **two terminals** plus PostgreSQL running.
+
+### Terminal 1 — Backend API
+
+```powershell
+cd backend
+uvicorn app.main:app --reload
+```
+
+API: http://127.0.0.1:8000  
+Docs: http://127.0.0.1:8000/docs
+
+### Terminal 2 — React UI
+
+```powershell
+cd frontend
+npm run dev
+```
+
+UI: http://localhost:5173
+
+The Vite dev server proxies `/api/*` to the backend, so the UI talks to FastAPI without CORS setup.
+
+### Using the UI
+
+1. Open http://localhost:5173
+2. Sidebar should show **Connected**
+3. Click **+ New chat** to create a session
+4. Type a message and press **Send**
+5. Click **×** on a session to remove it (soft-delete)
+
+### End-to-end flow
+
+```
+Browser (5173)
+  → POST /api/sessions/{id}/chat
+  → Vite proxy → FastAPI (8000)
+  → ChatService → Harness → LLM + tools
+  → Save agent_state to PostgreSQL
+  → GET /api/sessions/{id} (UI reloads conversation)
+```
+
+More detail:
+
+* [docs/frontend-backend-connection.md](docs/frontend-backend-connection.md) — how the UI connects to the API
+* [docs/request-lifecycle.md](docs/request-lifecycle.md) — full request path through DB and agent
+
+---
+
+## API quick reference
+
+| Action | Method | Path |
+|--------|--------|------|
+| List active sessions | `GET` | `/sessions/` |
+| Create session | `POST` | `/sessions/?title=...&workspace=...` |
+| Get session + messages | `GET` | `/sessions/{id}` |
+| Remove session | `DELETE` | `/sessions/{id}` |
+| Send message | `POST` | `/sessions/{id}/chat` |
+
+Chat request body:
+
+```json
+{ "message": "build a FastAPI todo application" }
+```
+
+Example (direct to backend, no proxy):
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/sessions/{session_id}/chat" `
+  -H "Content-Type: application/json" `
+  -d "{\"message\": \"Hi\"}"
+```
+
+---
+
+## Legacy: standalone agent (`agent.py`)
+
+For quick local testing without the database or React UI:
+
+### Simple web UI
 
 ```bash
 python agent.py
 ```
 
-Then open in your browser:
-
-```text
-http://127.0.0.1:8000/
-```
-
-Type a task in plain English, for example:
-
-```text
-build a FastAPI todo application
-```
-
-Click **Send**. The agent will run tools in the background and display a summary when the task is done.
-
-### API server
-
-You can also start the server with uvicorn:
-
-```bash
-uvicorn agent:app --reload --host 127.0.0.1 --port 8000
-```
-
-Send a chat request:
-
-```bash
-curl -X POST http://127.0.0.1:8000/chat ^
-  -H "Content-Type: application/json" ^
-  -d "{\"message\": \"build a FastAPI todo application\"}"
-```
-
-On macOS/Linux, use `\` instead of `^`.
-
-Example response:
-
-```json
-{
-  "reply": "Summary of the completed work..."
-}
-```
-
-Interactive API docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+Open http://127.0.0.1:8000/ — uses the built-in static page and `POST /chat` (no session persistence).
 
 ### CLI mode
-
-For terminal-only usage:
 
 ```bash
 python agent.py cli
 ```
 
-You should see a prompt:
+Type tasks at the `You >>` prompt. Type `exit` to quit.
 
-```text
-You >>
-```
-
-Type a task in plain English. The agent will call tools, print each action, and finish with a summary when the task is done.
-
-To stop the agent, type:
-
-```text
-exit
-```
+---
 
 ## Notes
 
 - Generated files are typically written under the `workspace/` directory.
-- Shell commands run with the current working directory as the project root.
-- Agent requests may take a long time to complete because the LLM runs multiple tool steps.
-- If you see connection or auth errors, check that `.env` is configured correctly and that your API key is valid.
+- Shell commands run with `workspace/` as the working directory for tool execution.
+- Agent requests may take a long time — the LLM may run many tool steps.
+- If the UI shows **Cannot reach backend**, ensure uvicorn is running on port 8000.
+- If chat fails, check `.env` LLM settings and the uvicorn terminal for errors.
